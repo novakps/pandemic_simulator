@@ -155,7 +155,7 @@ edges = [
     ('san francisco', 'tokyo'),
     ('seoul', 'tokyo'),
     ('seoul', 'shanghai'),
-    ('toronto', 'washington')     
+    ('toronto', 'washington')
     ] #89 edges?
 
 ADJACENT_CITIES = {name:[] for name in INFECTION_CARDS.keys()}
@@ -172,7 +172,7 @@ def build_game(players_count=4, difficulty_level=5):
     random.shuffle(player_cards)
     for i in range(CARDS_PER_PLAYER[players_count]):
         for player in players:
-            player.cards.append(player_cards.pop(0))                    
+            player.cards.append(player_cards.pop(0))
 
     #prepare player draw pile
     player_draw_pile = []
@@ -198,18 +198,18 @@ def build_game(players_count=4, difficulty_level=5):
                 research_stations=[ATLANTA],
                 outbreaks=0,
                 infection_rate_marker=0)
-    
+
     for i in range(3, 0 , -1):
         infect(game, 3, i)
     return game
-             
+
 def infect(game, rate, increment=1):
     for i in range(rate):
         game.infection_discard_pile.insert(0, game.infection_draw_pile.pop(0)) # first item in array is 'top' of pile
         city_name = game.infection_discard_pile[0]
         default_disease = INFECTION_CARDS[city_name]
         infect_city(game, city_name, default_disease, increment, [])
-        
+
 def infect_city(game, city_name, color, increment, ignore):
     city = game.cities[city_name]
     print 'infect_city', city_name, city, increment, ignore
@@ -221,7 +221,7 @@ def infect_city(game, city_name, color, increment, ignore):
         game.cities[city_name] = city._replace(**{color:level + increment})
         # check DISEASE_LIMIT
         if sum([getattr(city, color) for city in game.cities.values()]) > DISEASE_LIMIT:
-            raise DefeatException('No {color} disease cubes left.'.format(color=color))         
+            raise DefeatException('No {color} disease cubes left.'.format(color=color))
 
 def outbreak(game, city_name, color, ignore):
     print 'outbreak', city_name, ignore
@@ -266,7 +266,7 @@ def forecast(game, player, reordered_cards):
     index = player.cards.index(FORECAST)
     assert len(reordered_cards) == 6
     for i, card in enumerate(reordered_cards):
-        game.infection_draw_pile[i] = card 
+        game.infection_draw_pile[i] = card
     game.player_discard_pile.insert(0, player.pop(index))
 
 def drive(player, destination):
@@ -397,7 +397,7 @@ def discard_excess_card(game, player, card):
 def do_nothing():
     print 'do_nothing'
     pass
-  
+
 City = namedtuple('City', DISEASE_COLORS)
 Disease = namedtuple('Disease', ['color', 'cured', 'eradicated'])
 
@@ -431,19 +431,40 @@ Player Discard Pile:
                  diseases,
                  research_stations,
                  outbreaks,
-                 infection_rate_marker):
+                 infection_rate_marker,
+                 player_discard_pile=[],
+                 infection_discard_pile=[],
+                 next_infector_quiet=False,
+                 active_player_index=0):
         self.players = players
         self.player_draw_pile = player_draw_pile
-        self.player_discard_pile = []
         self.infection_draw_pile = infection_draw_pile
-        self.infection_discard_pile = []
+        self.player_discard_pile = player_discard_pile
+        self.infection_discard_pile = infection_discard_pile
         self.research_stations = research_stations
         self.outbreaks = outbreaks
         self.infection_rate_marker = infection_rate_marker
         self.cities = cities
         self.diseases = diseases
-        self.next_infector_quiet = False
-        
+        self.next_infector_quiet = next_infector_quiet
+        self.active_player_index = active_player_index
+
+    def getState(self):
+        return {
+            'players': self.players[:], s
+            'player_draw_pile': self.player_draw_pile[:],
+            'infection_draw_pile': self.infection_draw_pile[:],
+            'player_discard_pile': self.player_discard_pile[:],
+            'infection_discard_pile': self.infection_discard_pile[:],
+            'research_stations': self.research_stations[:],
+            'outbreaks': self.outbreaks[:],
+            'infection_rate_marker': self.infection_rate_marker,
+            'cities': self.cities[:],
+            'diseases', self.diseases[:],
+            'next_infector_quiet': self.next_infector_quiet,
+            'active_player_index': self.active_player_index
+        }
+
     def infection_rate(self):
         return INFECTION_RATE_TRACK[self.infection_rate_marker]
 
@@ -456,20 +477,20 @@ Player Discard Pile:
             player_discard_pile=pprint.pformat(self.player_discard_pile))
 
 class Runner:
-    def __init__(self, players_count=4, difficulty_level=5):
+    def __init__(self, players_count=2, difficulty_level=5):
         self.game = build_game(players_count, difficulty_level)
         pprint.pprint(self.game)
     def run(self):
         try:
             while True:
-                for player in self.game.players:
-                    self.take_turn(player)
+                self.take_turn()
         except Exception, e:
             traceback.print_exc(file=sys.stdout)
             pprint.pprint(self.game)
             print e
 
-    def take_turn(self, player):
+    def take_turn(self):
+        player = game.players[game.active_player_index]
         print 'take_turn', player, self.game.cities[player.location]
         actions = 4
         while actions:
@@ -482,6 +503,7 @@ class Runner:
             self.game.next_infector_quiet = False
         else:
             infect(self.game, self.game.infection_rate())
+        ## increment active player and decrent/reset action counter
 
     def update_medic_treat_disease(self):
         # this does not cost an action and can happen at any time
@@ -506,7 +528,7 @@ class Runner:
         if player.location in self.game.research_stations:
             def make_shuttle_flight(city): return lambda: shuttle_flight(self.game, player, city)
             actions.extend([make_shuttle_flight(city) for city in self.game.research_stations if city != player.location])
-            
+
             needed_to_cure = 5
             if player.role == SCIENTIST:
                 needed_to_cure = 4
@@ -516,7 +538,7 @@ class Runner:
                 color = curable_colors[0]
                 cities = [city for city in player.cards if city not in SPECIAL_EVENTS and INFECTION_CARDS[city] == color][:needed_to_cure]
                 actions.append(lambda: discover_cure(self.game, player, cities))
-                
+
         if (player.role == OPERATIONS_EXPERT or player.location in player.cards) and player.location not in self.game.research_stations:
             def make_build_research_station(city): return lambda: build_research_station(self.game, player, city)
             if len(self.game.research_stations) < MAX_RESEARCH_STATIONS:
@@ -538,7 +560,7 @@ class Runner:
                     actions.extend([make_dispatcher_charter_flight(other_player, city) for city in INFECTION_CARDS.keys() if city != other_player.location])
                 if other_player.location in self.game.research_stations:
                     actions.extend([make_dispatcher_shuttle_flight(other_player, city) for city in self.game.research_stations if city != other_player.location])
-        
+
         def make_treat_disease(color): return lambda:treat_disease(self.game, player, color)
         location_city = self.game.cities[player.location]
         actions.extend([make_treat_disease(color) for color in DISEASE_COLORS if getattr(location_city, color) > 0])
@@ -552,7 +574,7 @@ class Runner:
                 for other_player in colocated_players:
                     for card in player.cards:
                         print player.role, other_player.role, card
-                        actions.append(make_share_knowledge(player, other_player, card)) 
+                        actions.append(make_share_knowledge(player, other_player, card))
             elif player.location in player.cards:
                 print 'player.location in player.cards'
                 for other_player in colocated_players:
@@ -569,7 +591,7 @@ class Runner:
                     print other_player.role, player.role, other_player.location
                     actions.append(make_share_knowledge(other_player, player, other_player.location))
         return actions
-    
+
     def choose_action(self, player):
         return random.choice(self.available_actions(player))
 
@@ -582,4 +604,3 @@ class VictoryException(Exception):
 if __name__ == '__main__':
     runner = Runner()
     runner.run()
-
